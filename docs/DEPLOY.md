@@ -2,7 +2,9 @@
 
 ## Status — 14 Sept 2026
 
-Supabase is **live and verified**. Vercel and GitHub are not done yet.
+Supabase is **live and verified**. GitHub is **pushed** —
+[gyanendurout/Other_Website_Features](https://github.com/gyanendurout/Other_Website_Features).
+Vercel is the remaining step.
 
 | | |
 |---|---|
@@ -31,12 +33,13 @@ single biggest performance decision left in the deployment.
 
 ### Still to do
 
-1. Push to GitHub (repo is committed locally on `main`)
-2. Import to Vercel — Root Directory `web`, region `icn1`, three env vars below
-3. **Rotate both credentials that were shared in chat**: the `sb_secret_…` key
+1. Import to Vercel — **two** manual actions, listed in §7
+2. **Rotate both credentials that were shared in chat**: the `sb_secret_…` key
    (Settings → API) and the database password (Settings → Database). The app
    itself uses `catalog_read`, so rotating the `postgres` password does not
    break the site — only `publish.py`, which is run by hand anyway.
+   `catalog_read`'s own password was never shared and must **not** be rotated;
+   it is the one credential the deployment depends on.
 
 ---
 
@@ -130,45 +133,76 @@ catches it.
 The `service_role` key bypasses row-level security. It goes in your shell for
 this one command and **never** into the repo, the browser, or Vercel.
 
-### 6. GitHub
+### 6. GitHub — done
 
-This directory is not yet a git repository. `.gitignore` already excludes the
-things that must not be published — `data/` (693 MB of PNG), `db/*.db`, `.venv/`
-and `firecrawl/`, which holds a real `.env`.
-
-```powershell
-git init
-git add .
-git status                 # confirm no data/, db/, .venv/ or firecrawl/
-git commit -m "feat: publish catalog to Supabase + Vercel"
-git remote add origin https://github.com/<you>/<repo>.git
-git push -u origin main
-```
+Pushed to
+[gyanendurout/Other_Website_Features](https://github.com/gyanendurout/Other_Website_Features).
+`.gitignore` excludes the things that must not be published — `data/` (693 MB of
+PNG), `db/*.db`, `.venv/` and `firecrawl/`, which holds a real `.env` — and the
+published tree was checked against it: 143 files, no secret in any commit.
 
 Check `git status` before committing. Once 693 MB of PNG is in the history it
 does not come out without a rewrite.
 
-### 7. Vercel
+### 7. Vercel — two manual actions, everything else is committed
 
-Import the repo, then:
+Most of this configuration now lives in the repository, because the first
+deployment failed three times in a row on settings that had to be typed into a
+dashboard and were silently wrong each time.
 
-| Setting | Value |
+| Committed | Where |
 |---|---|
-| **Root Directory** | `web` |
-| Framework | Next.js (auto-detected) |
+| Framework preset (Next.js) | `web/vercel.json` |
+| Function region (`icn1`) | `web/vercel.json` |
+| `NEXT_PUBLIC_SUPABASE_URL` | `web/.env.production` |
+| `CATALOG_READONLY=1` | `web/.env.production` |
 
-Environment variables:
-
-| Name | Value |
-|---|---|
-| `DATABASE_URL` | the **transaction** pooler URI, port **6543** |
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` |
-| `CATALOG_READONLY` | `1` |
+Neither committed variable is a credential: the Supabase URL appears in every
+public plate URL the browser already requests, and `CATALOG_READONLY` is a
+behaviour flag — the real enforcement is that the app authenticates as
+`catalog_read`, a role with SELECT and nothing else.
 
 `CATALOG_READONLY=1` turns `/capture` into an explanation instead of a form, and
 makes the capture API return 403. The pipeline it drives needs Docker, Python
 and Playwright; Vercel has none of them, so a job queued there would be a row
 nothing ever picks up.
+
+What still has to be done by hand:
+
+**1. Root Directory → `web`.** This is the one setting that cannot be committed.
+Vercel reads it *before* it reads any file in the repository, so no file in the
+repository can influence it. The root has no `package.json`, so pointing Vercel
+at `./` makes it detect no framework, publish the repo as static files in about
+four seconds, and 404 every path. `index.html` at the repo root exists to catch
+exactly that: if you ever see a page explaining the Root Directory setting, that
+is what has happened. A real build takes roughly half a minute.
+
+**2. `DATABASE_URL`.** It carries a password, so it belongs in Vercel's
+encrypted environment variables and nowhere else. Scope it to Production *and*
+Preview. Take the value from `web/.env.local` via the clipboard — never retype
+it, and never rebuild it from a template plus a password found in a chat log:
+
+```powershell
+$u = (Get-Content web\.env.local | Where-Object { $_ -match '^DATABASE_URL=' } | Select-Object -First 1) -replace '^DATABASE_URL=',''
+Set-Clipboard -Value $u.Trim()
+"length : $($u.Trim().Length)"     # 134 for the current credential
+```
+
+A wrong length is the whole diagnosis. Everything except the password is 102
+characters, so a 123-character string means a 21-character password — which is
+the `postgres` user's, not `catalog_read`'s. That mistake authenticates against
+the right host with the wrong role's secret and returns `28P01`.
+
+Then **redeploy**. Vercel does not apply new environment variables to an
+existing deployment, and `NEXT_PUBLIC_*` is inlined at build time.
+
+### If it does not come up
+
+Open `/api/health`. It runs the same connection the pages do and reports the
+cause rather than a digest — whether `DATABASE_URL` arrived, whether the URI
+reached the transaction pooler, and what Postgres said if it refused. Every page
+that fails now renders that link instead of "Application error: a server-side
+exception has occurred".
 
 ---
 
