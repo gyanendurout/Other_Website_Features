@@ -44,7 +44,7 @@ export default function RootLayout({
         <footer className="shell">
           <div>
             Captured with self-hosted Firecrawl + crawl4ai · annotated with
-            Playwright · stored in SQLite
+            Playwright · served from Postgres and Supabase Storage
           </div>
         </footer>
       </body>

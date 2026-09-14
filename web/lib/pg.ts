@@ -25,10 +25,15 @@ import postgres from "postgres";
  * rendering anything. Deferring means a missing DATABASE_URL surfaces as a
  * clear error on the first request instead.
  */
-let _sql: ReturnType<typeof postgres> | null = null;
+// Cached on globalThis, not a module-scope variable: Next's dev server reloads
+// modules on edit, and a per-module client would leak a new pool on every hot
+// reload until the pooler refuses connections.
+const globalForPg = globalThis as unknown as {
+  _catalogSql?: ReturnType<typeof postgres>;
+};
 
 export function getSql(): ReturnType<typeof postgres> {
-  if (_sql) return _sql;
+  if (globalForPg._catalogSql) return globalForPg._catalogSql;
   const url = process.env.DATABASE_URL;
   if (!url) {
     throw new Error(
@@ -36,13 +41,29 @@ export function getSql(): ReturnType<typeof postgres> {
         "pooler URI (port 6543) — Project Settings > Database > Connection string."
     );
   }
-  _sql = postgres(url, {
-    prepare: false, // required: pgbouncer in transaction mode
-    max: 1, // one socket per serverless invocation
+  globalForPg._catalogSql = postgres(url, {
+    // required: pgbouncer in transaction mode cannot see server-side prepared
+    // statements created on a connection it has since handed to someone else
+    prepare: false,
+    /**
+     * NOT 1.
+     *
+     * Every page issues its queries with Promise.all, and with `prepare: false`
+     * postgres.js cannot pipeline them down one socket — so `max: 1` deadlocks:
+     * the first query holds the only connection and the rest wait forever. It
+     * does not error, it hangs, and the page streams an unterminated response
+     * that looks like a slow network. Measured against this pooler:
+     * max:1 -> hung past 45s, max:5 -> 0.83s for the same four queries.
+     *
+     * Supabase's transaction pooler is itself the connection pool, so a small
+     * client-side number here is about concurrency within one request, not
+     * about protecting Postgres.
+     */
+    max: 5,
     idle_timeout: 20,
-    connect_timeout: 10,
+    connect_timeout: 15,
   });
-  return _sql;
+  return globalForPg._catalogSql;
 }
 
 /** Rows for a query written with $1, $2 … placeholders. */

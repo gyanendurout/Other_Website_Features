@@ -1,5 +1,46 @@
 # Going online — Supabase + Vercel
 
+## Status — 14 Sept 2026
+
+Supabase is **live and verified**. Vercel and GitHub are not done yet.
+
+| | |
+|---|---|
+| Project | `vbyaqzkagzhatdqitfko` · region **ap-northeast-2 (Seoul)** |
+| Schemas | `catalog` (7 tables) · `pdp` (7 tables) · 22 indexes and 2 views each |
+| Rows | 2,535 published — every count matches the local SQLite exactly |
+| Storage | bucket `plates`, public, **695 objects / 43 MB** (from 693 MB of PNG) |
+| App role | `catalog_read` — SELECT only, writes refused, verified through the pooler |
+| Verified | all 13 routes 200, no broken images, no console errors, overlays correct |
+
+Local production build against Supabase, measured with curl:
+
+```
+/                0.19s      /pdp              0.29s
+/screens         0.17s      /pdp/matrix       0.39s
+/compare         0.23s      /pdp/drinkag1.com 0.65s
+/gaps            0.31s      /sites/joola.com  0.83s
+/search          0.30s      /features         0.95s   (870 KB of HTML)
+```
+
+**Pick the Vercel region deliberately.** The database is in Seoul. Vercel
+defaults to `iad1` (Washington DC), which would put roughly 200 ms of round trip
+between the function and Postgres on *every query* — and these pages issue three
+or four each. Set the function region to **`icn1` (Seoul)** to match. This is the
+single biggest performance decision left in the deployment.
+
+### Still to do
+
+1. Push to GitHub (repo is committed locally on `main`)
+2. Import to Vercel — Root Directory `web`, region `icn1`, three env vars below
+3. **Rotate both credentials that were shared in chat**: the `sb_secret_…` key
+   (Settings → API) and the database password (Settings → Database). The app
+   itself uses `catalog_read`, so rotating the `postgres` password does not
+   break the site — only `publish.py`, which is run by hand anyway.
+
+---
+
+
 The local pipeline does not change: `start.ps1`, `capture.py`, `annotate.py` and
 the two SQLite files all keep working exactly as `REQUIREMENTS.md` describes.
 What changes is that the **web app now reads Postgres**, and one command

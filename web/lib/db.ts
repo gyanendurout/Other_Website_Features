@@ -104,12 +104,12 @@ export async function getStats() {
 export function getSites() {
   return all_<Site & { feature_count: number; page_count: number; annotated: number }>(`
     SELECT s.*,
-      (SELECT COUNT(*) FROM catalog.features f WHERE f.site_id = s.id) AS feature_count,
+      (SELECT COUNT(*) FROM catalog.features f WHERE f.site_id = s.id)::int AS feature_count,
       (SELECT COUNT(*) FROM catalog.pages p
-        WHERE p.site_id = s.id AND p.scrape_status='ok')               AS page_count,
+        WHERE p.site_id = s.id AND p.scrape_status='ok')::int          AS page_count,
       (SELECT COUNT(*) FROM catalog.annotations a
          JOIN catalog.features f2 ON f2.id = a.feature_id
-        WHERE f2.site_id = s.id AND a.match_method <> 'failed')        AS annotated
+        WHERE f2.site_id = s.id AND a.match_method <> 'failed')::int   AS annotated
     FROM catalog.sites s
     ORDER BY feature_count DESC`);
 }
@@ -139,7 +139,7 @@ export function getPages(domain?: string) {
   const params = domain ? [domain] : [];
   return all_<PageRow>(
     `SELECT p.*, s.domain,
-        (SELECT COUNT(*) FROM catalog.features f WHERE f.page_id = p.id) AS feature_count,
+        (SELECT COUNT(*) FROM catalog.features f WHERE f.page_id = p.id)::int AS feature_count,
         (SELECT a.screenshot_path FROM catalog.annotations a
           WHERE a.page_id = p.id AND a.screenshot_path IS NOT NULL LIMIT 1) AS shot
       FROM catalog.pages p JOIN catalog.sites s ON s.id = p.site_id
@@ -152,7 +152,7 @@ export function getPages(domain?: string) {
 export function getPage(id: number) {
   return one<PageRow>(
     `SELECT p.*, s.domain,
-        (SELECT COUNT(*) FROM catalog.features f WHERE f.page_id = p.id) AS feature_count,
+        (SELECT COUNT(*) FROM catalog.features f WHERE f.page_id = p.id)::int AS feature_count,
         (SELECT a.screenshot_path FROM catalog.annotations a
           WHERE a.page_id = p.id AND a.screenshot_path IS NOT NULL LIMIT 1) AS shot
       FROM catalog.pages p JOIN catalog.sites s ON s.id = p.site_id

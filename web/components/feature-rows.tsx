@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Feature } from "@/lib/db";
+import { plateUrl, type Feature } from "@/lib/db";
 
 export default function FeatureRows({
   features,
@@ -48,9 +48,9 @@ export default function FeatureRows({
                   {f.page_type ?? "page"} ↗
                 </a>
               ) : null}
-              {f.crop_path ? (
+              {plateUrl(f.crop_path) ? (
                 <a
-                  href={`/api/shot?p=${encodeURIComponent(f.crop_path)}`}
+                  href={plateUrl(f.crop_path)!}
                   target="_blank"
                   rel="noreferrer"
                   className="chip"

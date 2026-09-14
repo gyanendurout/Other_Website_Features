@@ -105,6 +105,11 @@ FOREACH s IN ARRAY ARRAY['catalog', 'pdp'] LOOP
     'CREATE INDEX IF NOT EXISTS idx_features_cat ON %I.features(category)', s);
   EXECUTE format(
     'CREATE INDEX IF NOT EXISTS idx_features_fts ON %I.features USING GIN (search_vector)', s);
+  -- Postgres does not index a foreign key for you. Nearly every query in the
+  -- app LEFT JOINs pages on this column, and ON DELETE SET NULL would scan the
+  -- whole table without it.
+  EXECUTE format(
+    'CREATE INDEX IF NOT EXISTS idx_features_page ON %I.features(page_id)', s);
 
   ---------------------------------------------------------- 4. canonical taxonomy
   EXECUTE format($q$
@@ -121,6 +126,11 @@ FOREACH s IN ARRAY ARRAY['catalog', 'pdp'] LOOP
       canonical_id bigint NOT NULL REFERENCES %I.canonical_features(id) ON DELETE CASCADE,
       PRIMARY KEY (feature_id, canonical_id)
     )$q$, s, s, s);
+  -- The composite primary key indexes feature_id (leading column) but leaves
+  -- canonical_id unindexed. The feature matrix joins on canonical_id for every
+  -- row it draws, so that is the direction that needs its own index.
+  EXECUTE format(
+    'CREATE INDEX IF NOT EXISTS idx_links_canonical ON %I.feature_links(canonical_id)', s);
 
   ---------------------------------------------------------- 5. annotations
   EXECUTE format($q$
@@ -215,3 +225,33 @@ SELECT s.domain, s.name, s.vertical,
   LEFT JOIN pdp.features f ON f.site_id = s.id
   LEFT JOIN pdp.pages    p ON p.site_id = s.id
  GROUP BY s.id, s.domain, s.name, s.vertical, s.last_scraped_at;
+
+-- ------------------------------------------------------------
+-- Least privilege for the web app
+--
+-- The site only ever reads. Handing it the `postgres` superuser means any
+-- injection or leaked env var is total compromise, and it puts a credential in
+-- Vercel that also has to be rotated whenever the database password is.
+--
+-- `catalog_read` can SELECT from the two schemas and nothing else: no INSERT,
+-- no DDL, no access to `public`, `auth` or `storage`. The one write path the
+-- app has (queueing a capture job) is disabled in the hosted deployment by
+-- CATALOG_READONLY, so read-only costs nothing there.
+--
+-- The password is set separately, outside version control:
+--   ALTER ROLE catalog_read WITH PASSWORD '...';
+-- ------------------------------------------------------------
+DO $do$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'catalog_read') THEN
+    CREATE ROLE catalog_read LOGIN;
+  END IF;
+END
+$do$;
+
+GRANT USAGE ON SCHEMA catalog, pdp TO catalog_read;
+GRANT SELECT ON ALL TABLES IN SCHEMA catalog, pdp TO catalog_read;
+
+-- and on anything added later, so a new table is not silently unreadable
+ALTER DEFAULT PRIVILEGES IN SCHEMA catalog GRANT SELECT ON TABLES TO catalog_read;
+ALTER DEFAULT PRIVILEGES IN SCHEMA pdp     GRANT SELECT ON TABLES TO catalog_read;
