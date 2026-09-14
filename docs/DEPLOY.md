@@ -25,21 +25,30 @@ Local production build against Supabase, measured with curl:
 /search          0.30s      /features         0.95s   (870 KB of HTML)
 ```
 
-**Pick the Vercel region deliberately.** The database is in Seoul. Vercel
-defaults to `iad1` (Washington DC), which would put roughly 200 ms of round trip
+**The region is pinned, and it matters.** The database is in Seoul. Vercel
+defaults to `iad1` (Washington DC), which puts roughly 200 ms of round trip
 between the function and Postgres on *every query* — and these pages issue three
-or four each. Set the function region to **`icn1` (Seoul)** to match. This is the
-single biggest performance decision left in the deployment.
+or four each. The first deployment ran in `iad1`; `web/vercel.json` now pins
+`icn1` (Seoul) so this cannot regress. `/api/health` echoes `VERCEL_REGION`, so
+it can be verified rather than assumed.
 
 ### Still to do
 
 1. Import to Vercel — **two** manual actions, listed in §7
-2. **Rotate both credentials that were shared in chat**: the `sb_secret_…` key
-   (Settings → API) and the database password (Settings → Database). The app
-   itself uses `catalog_read`, so rotating the `postgres` password does not
-   break the site — only `publish.py`, which is run by hand anyway.
-   `catalog_read`'s own password was never shared and must **not** be rotated;
-   it is the one credential the deployment depends on.
+2. **Rotate all three credentials that were shared in chat.** Do this *after*
+   the deploy is confirmed working, so a rotation and a deployment are not being
+   debugged at the same time.
+
+   | Credential | Where | What breaks |
+   |---|---|---|
+   | `sb_secret_…` key | Settings → API | `upload_plates.py` only |
+   | `postgres` password | Settings → Database | `publish.py` only |
+   | `catalog_read` password | Database → Roles | **the live site** |
+
+   The first two are run by hand and never touch the deployment. `catalog_read`
+   is the one the site authenticates as, so rotating it means updating
+   **both** Vercel's `DATABASE_URL` and `web/.env.local` in the same pass —
+   change one and the other silently serves `28P01`.
 
 ---
 
