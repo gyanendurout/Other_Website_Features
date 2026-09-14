@@ -1,0 +1,234 @@
+/* PDP Lab — styles scoped to /pdp only.
+   Imported by app/pdp/layout.tsx, never by globals.css, so nothing here can
+   reach the pickleball catalog's pages. Every selector is prefixed .pdp-. */
+
+.pdp-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.pdp-card {
+  display: block;
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.35s var(--ease), border-color 0.2s, background 0.2s;
+}
+.pdp-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--line-bright);
+  background: var(--surface-2);
+}
+
+.pdp-shot {
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--ink);
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+/* PDPs are 10,000px+ tall; show the top of the page, not a squashed whole. */
+.pdp-shot img {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: top center;
+  height: 100%;
+}
+.pdp-shot .pdp-none {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--text-faint);
+  font-size: 0.78rem;
+}
+
+.pdp-card-body { padding: 14px 16px 16px; }
+.pdp-card-body h3 {
+  margin: 0;
+  font-size: 1.08rem;
+  letter-spacing: -0.02em;
+}
+.pdp-card-body .pdp-dom {
+  color: var(--signal);
+  font-size: 0.74rem;
+  margin-top: 2px;
+}
+.pdp-card-body .pdp-vert {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  margin-top: 10px;
+  min-height: 2.4em;
+}
+.pdp-figs {
+  display: flex;
+  gap: 18px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.pdp-figs b { font-size: 1.15rem; letter-spacing: -0.03em; }
+.pdp-figs span {
+  display: block;
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  margin-top: 1px;
+}
+
+/* ---- the explanation rail: description is the point here, so it is always
+   visible, unlike the main catalog's rail where it appears only on click ---- */
+
+.pdp-expl {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 10px;
+  transition: background 0.15s;
+}
+.pdp-expl:last-child { border-bottom: 0; }
+.pdp-expl:hover,
+.pdp-expl[data-active="true"] { background: var(--surface-3); }
+.pdp-expl[data-active="true"] { box-shadow: inset 2px 0 0 var(--signal); }
+.pdp-expl[data-locked="true"] { box-shadow: inset 2px 0 0 var(--lock); }
+
+.pdp-expl .pdp-n {
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  border: 1px solid var(--line-bright);
+  border-radius: var(--r-sm);
+  height: 20px;
+  display: grid;
+  place-items: center;
+}
+.pdp-expl[data-locked="true"] .pdp-n {
+  color: var(--ink);
+  background: var(--lock);
+  border-color: var(--lock);
+}
+.pdp-expl strong { font-size: 0.86rem; letter-spacing: -0.01em; }
+.pdp-expl .pdp-meta {
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  margin-top: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.pdp-expl .pdp-why {
+  font-size: 0.79rem;
+  color: var(--text-dim);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.pdp-expl .pdp-quote {
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--signal-line);
+  font-style: italic;
+}
+
+/* ---- matrix ---- */
+
+.pdp-matrix-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-lg); }
+.pdp-matrix { border-collapse: collapse; width: 100%; font-size: 0.76rem; }
+.pdp-matrix th,
+.pdp-matrix td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; }
+.pdp-matrix thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  z-index: 2;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 500;
+  white-space: nowrap;
+}
+/* domain columns are narrow; rotate nothing, just abbreviate and title= it */
+.pdp-matrix thead th.pdp-col { text-align: center; width: 44px; }
+.pdp-matrix tbody th {
+  font-weight: 500;
+  white-space: nowrap;
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.pdp-matrix tbody tr:hover th,
+.pdp-matrix tbody tr:hover td { background: var(--surface-3); }
+.pdp-matrix td.pdp-cell { text-align: center; color: var(--text-faint); }
+.pdp-matrix td.pdp-cell[data-on="true"] { color: var(--signal); font-weight: 600; }
+.pdp-matrix .pdp-cat-row th {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding-top: 12px;
+}
+.pdp-matrix .pdp-n-sites {
+  color: var(--text-faint);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ---- misc ---- */
+
+.pdp-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.pdp-pill {
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+.pdp-pill:hover { border-color: var(--line-bright); color: var(--text); }
+.pdp-pill[data-on="true"] {
+  border-color: var(--signal-line);
+  background: var(--signal-soft);
+  color: var(--text);
+}
+
+.pdp-note {
+  border-left: 2px solid var(--line-bright);
+  padding: 2px 0 2px 12px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  margin: 14px 0;
+}
+
+.pdp-missed {
+  border: 1px dashed var(--line-bright);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  margin-top: 18px;
+}
+.pdp-missed h4 {
+  margin: 0 0 4px;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.pdp-missed ul { margin: 8px 0 0; padding-left: 18px; }
+.pdp-missed li { font-size: 0.79rem; color: var(--text-dim); margin-bottom: 5px; }

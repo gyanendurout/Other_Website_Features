@@ -1,0 +1,33 @@
+# ---- never publish -------------------------------------------------
+# 695 MB of PNG plus the WebP derived from it. Plates live in Supabase
+# Storage; scripts/upload_plates.py puts them there.
+data/
+# local working catalogs — Supabase is the published copy
+db/*.db
+db/*.db-journal
+
+# vendored upstream Firecrawl, and firecrawl/.env holds real secrets
+firecrawl/
+
+# ---- environments --------------------------------------------------
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+.env*.local
+
+# ---- node / next ---------------------------------------------------
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.vercel/
+
+# ---- noise ---------------------------------------------------------
+*.log
+.DS_Store
+Thumbs.db
+
+# generated knowledge-graph cache
+graphify-out/
