@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { pdpCategories, pdpSites, pdpStats, plateUrl } from "@/lib/pdp-db";
+import {
+  cleanPlate,
+  pdpCategories,
+  pdpSites,
+  pdpStats,
+  plateUrl,
+} from "@/lib/pdp-db";
 
 export const dynamic = "force-dynamic";
 
@@ -77,9 +83,14 @@ export default async function PdpIndex() {
               <Link key={s.domain} href={`/pdp/${s.domain}`} className="pdp-card">
                 <div className="pdp-shot">
                   {plateUrl(s.shot) ? (
+                    /* The clean twin, not the annotated plate. A card is a
+                       picture of the page; the annotated plate is a mesh of
+                       circles that reads as noise at 320px and tells you
+                       nothing about which site you are looking at. The
+                       circles are the point of the detail view, not here. */
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={plateUrl(s.shot) ?? ""}
+                      src={plateUrl(cleanPlate(s.shot)) ?? plateUrl(s.shot) ?? ""}
                       alt={`${s.name ?? s.domain} product page`}
                       loading="lazy"
                     />

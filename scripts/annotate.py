@@ -126,6 +126,26 @@ JS_ANNOTATE = r"""
   const bodyX = bodyRect.left + window.scrollX;
   const bodyY = bodyRect.top + window.scrollY;
 
+  // Clamp the layer to the page it is drawn on.
+  //
+  // The circles are absolutely positioned in document space, and an absolutely
+  // positioned child grows its scroll container. A circle around an element at
+  // the right edge draws its ellipse a few pixels past that edge; one around a
+  // wide off-screen carousel draws it a long way past. Either way the document
+  // gets wider, and a full-page screenshot faithfully captures the dead space:
+  // supergoop's annotated plate came out 4516px wide against a 2880px page,
+  // 1636px of which was nothing. That skews every card crop and every overlay
+  // coordinate the viewer computes from the image width.
+  //
+  // Measured before the circles exist, so this is the true page size. Anything
+  // drawn past the page edge is clipped, which is what should happen -- the
+  // page ends there.
+  const clampW = document.documentElement.scrollWidth;
+  const clampH = document.documentElement.scrollHeight;
+  host.style.width = Math.max(0, clampW - bodyX) + "px";
+  host.style.height = Math.max(0, clampH - bodyY) + "px";
+  host.style.overflow = "hidden";
+
   const results = [];
   const norm = s => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -363,6 +383,72 @@ window.__killOverlays = (opts) => {
 """
 
 JS_DISMISS = "() => (window.__killOverlays ? window.__killOverlays({scroll: true}) : 0)"
+
+# Proof that the page is clean, taken immediately before each plate is written.
+#
+# killOverlays is thorough but it is a set of heuristics, and a heuristic that
+# misses reports nothing -- the run still prints a healthy "23/31 circled" and
+# the popup is simply in the picture. This asks the opposite question: is
+# anything still covering the page? A fixed or sticky layer occupying more than
+# a tenth of the viewport is a modal, a dimmer, a consent wall or a chat window
+# that opened itself. Small persistent widgets are deliberately NOT reported:
+# a rewards tab and a support launcher are real page features that this catalog
+# circles, and removing them would delete evidence.
+#
+# It also counts images that resolved to nothing, which is the other way a
+# plate comes out wrong -- snitch's review thumbnails rendered as blank grey
+# boxes because the lazy loader never fired for them.
+JS_OVERLAY_AUDIT = r"""
+() => {
+  const vw = innerWidth, vh = innerHeight;
+  const out = [], seen = new Set();
+  const walk = (root, depth) => {
+    if (depth > 4) return;
+    root.querySelectorAll("*").forEach(el => {
+      if (el.shadowRoot) walk(el.shadowRoot, depth + 1);
+      if (el.id === "__fx_overlay") return;
+      if (el.closest && el.closest("#__fx_overlay")) return;
+      const cs = getComputedStyle(el);
+      // Fixed only. `sticky` is in-flow layout, not an overlay: aachho's
+      // product column is position:sticky at 691x717 and Supergoop's header is
+      // sticky at 1440x143. Both are ordinary page structure, and a checker
+      // that flags them on every run teaches you to ignore it -- which is
+      // exactly how the real popup gets through.
+      if (cs.position !== "fixed") return;
+      if (cs.display === "none" || cs.visibility === "hidden") return;
+      if (parseFloat(cs.opacity || "1") < 0.05) return;
+      const r = el.getBoundingClientRect();
+      const visW = Math.min(r.right, vw) - Math.max(r.left, 0);
+      const visH = Math.min(r.bottom, vh) - Math.max(r.top, 0);
+      if (visW <= 0 || visH <= 0) return;
+      const pct = 100 * (visW * visH) / (vw * vh);
+      // Even among fixed layers, a short bar is a legitimate feature: this
+      // catalog circles free-shipping announcement bars and sticky add-to-cart
+      // rails deliberately. Height is the discriminator -- a modal or a dimmer
+      // is tall; a bar is not.
+      const tall = visH >= vh * 0.35;
+      if (!tall && pct < 40) return;
+      const key = el.tagName + (el.id || "") + Math.round(r.width) + "x" + Math.round(r.height);
+      if (seen.has(key)) return;
+      seen.add(key);
+      const cls = (el.className && el.className.baseVal !== undefined)
+                    ? el.className.baseVal : el.className;
+      out.push({tag: el.tagName, id: el.id || "",
+                cls: String(cls || "").slice(0, 60),
+                w: Math.round(r.width), h: Math.round(r.height),
+                pct: Math.round(pct * 10) / 10});
+    });
+  };
+  walk(document.body, 0);
+  const imgs = Array.from(document.images);
+  return {
+    overlays: out,
+    blank: imgs.filter(i => i.complete && i.naturalWidth === 0).length,
+    pending: imgs.filter(i => !i.complete).length,
+    docW: document.documentElement.scrollWidth,
+  };
+}
+"""
 
 # Installed via add_init_script so it is armed before any page script runs.
 JS_KILLER_INSTALL = OVERLAY_KILLER + r"""
@@ -610,6 +696,41 @@ def is_challenged(page) -> bool:
     return len(body.strip()) < 400
 
 
+def assert_clean(page, label: str) -> list[str]:
+    """Kill whatever is still covering the page, then report what survived.
+
+    Called immediately before each plate is written. One retry, never a loop:
+    if an overlay outlives a second kill it is not going away, and hammering a
+    live third-party page is exactly what the politeness rules forbid.
+
+    Returns human-readable lines; a line starting with "!!" is a bad plate.
+    """
+    notes: list[str] = []
+    try:
+        a = page.evaluate(JS_OVERLAY_AUDIT)
+    except Exception:
+        return notes
+
+    if a.get("overlays"):
+        try:
+            page.evaluate(JS_DISMISS)
+            page.wait_for_timeout(350)
+            a = page.evaluate(JS_OVERLAY_AUDIT)
+        except Exception:
+            pass
+
+    for o in a.get("overlays", []):
+        ident = o["id"] or o["cls"] or "(unnamed)"
+        notes.append(f"!! {label}: <{o['tag'].lower()} {ident}> still covers "
+                     f"{o['pct']}% of the viewport ({o['w']}x{o['h']})")
+    if a.get("blank"):
+        notes.append(f"!! {label}: {a['blank']} image(s) resolved to nothing "
+                     f"- they will be blank boxes in the plate")
+    if a.get("pending"):
+        notes.append(f"   {label}: {a['pending']} image(s) still in flight")
+    return notes
+
+
 def annotate_page(pw, con, page_row, style: str, wait_ms: int,
                   locale: str | None = None) -> dict:
     url = page_row["url"]
@@ -689,6 +810,10 @@ def annotate_page(pw, con, page_row, style: str, wait_ms: int,
         slug0 = db.slugify(url.split(domain, 1)[-1]) or "index"
         out_dir0 = SHOT_DIR / domain
         out_dir0.mkdir(parents=True, exist_ok=True)
+        # Prove the page is clean before committing it to disk, not after.
+        plate_notes = assert_clean(page, "clean")
+        for n in plate_notes:
+            print("   " + n)
         # clean plate first, so the web UI can draw its own overlays
         page.screenshot(path=str(out_dir0 / f"{slug0[:70]}-clean.png"), full_page=True,
                         timeout=SHOT_TIMEOUT_MS)
@@ -709,6 +834,12 @@ def annotate_page(pw, con, page_row, style: str, wait_ms: int,
         out_dir = SHOT_DIR / domain
         out_dir.mkdir(parents=True, exist_ok=True)
         shot = out_dir / f"{slug[:70]}.png"
+        # The plate the crops are cut from. A popup landing between the two
+        # screenshots ruins only this one, which is the failure the clean-plate
+        # comparison exists to catch -- so check here too, not just above.
+        for n in assert_clean(page, "annotated"):
+            print("   " + n)
+            plate_notes.append(n)
         page.screenshot(path=str(shot), full_page=True, timeout=SHOT_TIMEOUT_MS)
     finally:
         ctx.close()
@@ -718,6 +849,7 @@ def annotate_page(pw, con, page_row, style: str, wait_ms: int,
     crops_made = _save(con, feats, results, page_row, shot, rel_shot, out_dir, slug)
     found = sum(1 for r in results if r.get("found"))
     return {"url": url, "total": len(feats), "found": found,
+            "notes": plate_notes,
             "shot": rel_shot, "crops": crops_made}
 
 
